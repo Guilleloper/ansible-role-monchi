@@ -1,0 +1,160 @@
+---
+- name: System group
+  group:
+    name: "{{ monchi__group_name }}"
+    gid: "{{ monchi__group_id }}"
+
+- name: System user
+  user:
+    name: "{{ monchi__user_name }}"
+    uid: "{{ monchi__user_id }}"
+    group: "{{ monchi__group_name }}"
+    groups: docker
+    home: "{{ monchi__user_home }}"
+    shell: "{{ monchi__user_shell }}"
+
+- name: Ansible modules dependencies
+  apt:
+    name: "{{ item }}"
+    state: present
+    update_cache: yes
+  loop:
+    - python3-pip=9.0.1-2+rpt2
+    - virtualenv=15.1.0+ds-1
+    - python-docker=1.9.0-1
+
+- name: System dependencies
+  apt:
+    name: "{{ packages }}"
+    state: present
+    update_cache: no
+  vars:
+    packages:
+      - jq=1.5+dfsg-1.3
+      - git
+
+- name: PiP dependencies
+  pip:
+    name:
+      - docker==4.4.4
+    state: present
+
+- name: Folders
+  file:
+    state: directory
+    path: "{{ item }}"
+    owner: "{{ monchi__user_name }}"
+    group: "{{ monchi__group_name }}"
+    mode: 0755
+  when:
+    - item != "/tmp"
+    - item != "/var/tmp"
+  loop:
+    - "{{ monchi__path_logs }}"
+    - "{{ monchi__path_data }}"
+    - "{{ monchi__path_data }}/tmp"
+    - "{{ monchi__path_tmp }}"
+    - "{{ monchi__docker_path_config }}"
+  
+- name: Log files
+  copy:
+    content: ""
+    dest: "{{ item }}"
+    force: no
+    owner: "{{ monchi__user_name }}"
+    group: "{{ monchi__group_name }}"
+    mode: 0644
+  with_items:
+    - "{{ monchi__log_default }}"
+
+- name: Set variable for Logrotate Ansible template
+  set_fact:
+    monchi_log_files:
+      - "{{ monchi__log_default }}"
+
+- name: Logrotate config file
+  template: 
+    src: monchi.logrotate.j2
+    dest: /etc/logrotate.d/monchi
+    owner: root
+    group: root
+    mode: 0644
+
+- name: Git repository download
+  git:
+    repo: "https://{{ monchi__git_user }}:{{ monchi__git_pass }}@{{ monchi__git_server }}/{{ monchi__git_repo }}"
+    dest: "{{ monchi__path_tmp }}/monchi"
+    version: "{{ monchi__git_version }}"
+    force: yes
+  check_mode: no
+  changed_when: False
+
+- name: Configuration setting (Bot settings)
+  shell: |
+    jq '.DEFAULT.BOT_TOKEN="{{ monchi__bot_token }}"' {{ monchi__path_tmp }}/monchi/config/config.json > {{ monchi__path_tmp }}/monchi/config/config.tmp
+    jq '.DEFAULT.CLIENT_IDS=["{{ monchi__bot_client_ids[0] }}", "{{ monchi__bot_client_ids[1] }}"]' {{ monchi__path_tmp }}/monchi/config/config.tmp > {{ monchi__path_tmp }}/monchi/config/config.json
+  check_mode: no
+  changed_when: False
+
+- name: Configuration setting (Managers and start date)
+  shell: |
+    jq '.LEAGUE.MANAGERS=["{{ monchi__managers[0] }}", "{{ monchi__managers[1] }}", "{{ monchi__managers[2] }}", "{{ monchi__managers[3] }}", "{{ monchi__managers[4] }}", "{{ monchi__managers[5] }}", "{{ monchi__managers[6] }}", "{{ monchi__managers[7] }}", "{{ monchi__managers[8] }}"]' {{ monchi__path_tmp }}/monchi/config/config.json > {{ monchi__path_tmp }}/monchi/config/config.tmp
+    jq '.LEAGUE.START_DATE="{{ monchi__start_date }}"' {{ monchi__path_tmp }}/monchi/config/config.tmp > {{ monchi__path_tmp }}/monchi/config/config.json
+  check_mode: no
+  changed_when: False
+
+- name: Configuration settings (Pre-defined internal Docker locations)
+  shell: |
+    jq '.DEFAULT.LOG_FILE="/monchi/log/monchi.log"' {{ monchi__path_tmp }}/monchi/config/config.json > {{ monchi__path_tmp }}/monchi/config/config.tmp
+    jq '.DEFAULT.DB_MATCHDAYS_FILE="/monchi/data/matchdays.json"' {{ monchi__path_tmp }}/monchi/config/config.tmp > {{ monchi__path_tmp }}/monchi/config/config.json
+    jq '.DEFAULT.DB_TRANSACTIONS_FILE="/monchi/data/transactions.csv"' {{ monchi__path_tmp }}/monchi/config/config.json > {{ monchi__path_tmp }}/monchi/config/config.tmp
+    jq '.DEFAULT.DB_TRANSACTIONS_BACKUP_FILE="/monchi/data/tmp/transactions.tmp"' {{ monchi__path_tmp }}/monchi/config/config.tmp > {{ monchi__path_tmp }}/monchi/config/config.json
+    jq '.DEFAULT.DB_STATS_FILE="/monchi/data/stats.json"' {{ monchi__path_tmp }}/monchi/config/config.json > {{ monchi__path_tmp }}/monchi/config/config.tmp
+    mv {{ monchi__path_tmp }}/monchi/config/config.tmp {{ monchi__path_tmp }}/monchi/config/config.json
+  check_mode: no
+  changed_when: False
+
+- name: Locate the configuration file
+  copy:
+    src: "{{ item.source }}" 
+    remote_src: yes
+    dest: "{{ item.dest }}"
+    owner: "{{ monchi__user_name }}"
+    group: "{{ monchi__group_name }}"
+    mode: 0644
+  loop:
+    - { source: "{{ monchi__path_tmp }}/monchi/config/config.json", dest: "{{ monchi__docker_path_config }}/config.json" }
+  notify:
+    - Restart Systemd service
+
+- name: Delete the downloaded git repository
+  file:
+    path: "{{ monchi__path_tmp }}/monchi"
+    state: absent
+  check_mode: no
+  changed_when: False
+
+- name: Create Docker containter
+  docker_container:
+    name: monchi
+    image: "monchi:{{ monchi__docker_tag }}"
+    state: present
+    volumes:
+      - "/etc/timezone:/etc/timezone:ro"
+      - "/etc/localtime:/etc/localtime:ro"
+      - "{{ monchi__path_data }}:/monchi/data"
+      - "{{ monchi__docker_path_config }}:/monchi/config"
+      - "{{ monchi__path_logs }}:/monchi/log"
+  notify:
+    - Restart Systemd service
+
+- name: Systemd service file
+  copy:
+    src: docker/monchi.service
+    dest: /lib/systemd/system/monchi.service
+    owner: root
+    group: root
+    mode: 0644
+  notify:
+    - Restart Systemd service
+...

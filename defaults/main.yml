@@ -1,0 +1,52 @@
+---
+# Deployment mode
+monchi__deployment_mode: "docker"
+
+# System user and group
+monchi__group_name: "monchi"
+monchi__group_id: 10002
+monchi__user_name: "monchi"
+monchi__user_id: 10002
+monchi__user_home: "/home/monchi"
+monchi__user_shell: "/usr/sbin/nologin"
+
+# Common locations
+monchi__path_logs: "/var/log/monchi"
+monchi__path_data: "/var/lib/monchi"
+monchi__path_tmp: "/var/tmp"
+
+# Locations for Docker deployment
+monchi__docker_tag: "latest"
+monchi__docker_path_config: "/etc/monchi"
+
+# Locations for Linux deployment
+monchi__linux_path_main: "/opt/monchi"
+
+# Log files
+monchi__log_default: "{{ monchi__path_logs }}/monchi.log"
+
+# Git
+monchi__git_server: "github.com"
+monchi__git_repo: "Guilleloper/monchi.git"
+monchi__git_user: "changeme"
+monchi__git_pass: "changeme"
+monchi__git_version: "master"
+
+# Telegram bot
+monchi__bot_token: "changeme"
+monchi__bot_client_ids: "changeme"
+
+# Game settings
+monchi__managers:
+  - manager_1
+  - manager_2
+  - manager_3
+  - manager_4
+  - manager_5
+  - manager_6
+  - manager_7
+  - manager_8
+  - manager_9
+  - manager_10
+monchi__start_date: "01/01/2020"
+...

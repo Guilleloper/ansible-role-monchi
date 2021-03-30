@@ -1,0 +1,9 @@
+---
+- name: Linux deployment
+  import_tasks: linux.yml
+  when: monchi__deployment_mode == 'linux'
+
+- name: Docker deployment
+  import_tasks: docker.yml
+  when: monchi__deployment_mode == 'docker'
+...

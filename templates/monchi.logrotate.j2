@@ -1,0 +1,11 @@
+{% for item in monchi_log_files|unique %}
+{{ item }}
+{% endfor %}
+{
+  rotate 60
+  daily
+  compress
+  delaycompress
+  copytruncate
+  missingok
+}

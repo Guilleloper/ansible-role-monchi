@@ -1,0 +1,16 @@
+[Unit]
+Description=Monchi, the Telegram Bot for LigaFantasyMarca
+After=docker.service
+Wants=network-online.target docker.socket
+Requires=docker.socket
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/docker start -a monchi
+ExecStop=/usr/bin/docker stop -t 30 monchi
+User=monchi
+Restart=on-failure
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target
